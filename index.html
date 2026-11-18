@@ -182,6 +182,21 @@ footer{margin-top:28px;text-align:center;font-size:13px;color:var(--muted)}
 .revlist li b{font-family:var(--display);color:var(--turmeric);font-weight:400;font-size:20px}
 .revlist li.bad{border:1.5px solid var(--kumkum)}
 .timer.small{font-size:64px}
+.cngrid{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+.cngrid button,.cngrid div{min-height:56px;padding:4px 2px;border-radius:8px;font-family:var(--body);font-weight:700;font-size:clamp(11px,3.1vw,15px);line-height:1.1;text-transform:uppercase;letter-spacing:.01em;background:#efe3cf;color:#2a0d00;border:2px solid transparent;display:flex;align-items:center;justify-content:center;text-align:center;overflow-wrap:anywhere;hyphens:auto}
+.cngrid button.armed{border-color:var(--turmeric);box-shadow:0 0 0 3px rgba(245,184,46,.45);background:#fff4dc}
+.cngrid .red{background:var(--kumkum);color:#fff}
+.cngrid .blue{background:#3b6fd4;color:#fff}
+.cngrid .neutral{background:#9c8b74;color:#20140c}
+.cngrid .assassin{background:#050203;color:#f8efe4;border-color:#f8efe4}
+.cngrid button.done{opacity:.9;cursor:default}
+.cngrid.key div{min-height:44px}
+.cnscore{display:flex;justify-content:space-between;gap:10px;font-weight:700}
+.cnscore span{flex:1;text-align:center;border-radius:10px;padding:8px;font-variant-numeric:tabular-nums}
+.cnred{background:var(--kumkum);color:#fff}
+.cnblue{background:#3b6fd4;color:#fff}
+.announce.red{background:var(--kumkum);color:#fff}
+.announce.blue{background:#3b6fd4;color:#fff}
 </style>
 </head>
 <body>
@@ -220,6 +235,11 @@ footer{margin-top:28px;text-align:center;font-size:13px;color:var(--muted)}
     <span class="tag new">New · made for this site</span>
     <h2>Kaaram Meter</h2>
     <p>Secret numbers, a spicy scale, one faker. Line up in order and catch the Kalthi.</p>
+  </button>
+  <button class="gamecard sm" data-go="codenames">
+    <span class="tag new">New · 2 teams</span>
+    <h2>Codenames</h2>
+    <p>One phone is the board. Spymasters give one-word clues so their team finds their words.</p>
   </button>
   <button class="gamecard sm" data-go="charades">
     <span class="tag">2 teams · one phone</span>
@@ -343,6 +363,41 @@ footer{margin-top:28px;text-align:center;font-size:13px;color:var(--muted)}
       <div class="codes" id="h-codes"></div>
     </div>
     <div id="h-panel" class="stack"></div>
+  </div>
+</section>
+
+<!-- ============ CODENAMES ============ -->
+<section id="v-codenames" class="hidden">
+  <div id="cn-setup" class="stack">
+    <div class="topbar"><button class="ghost mini" data-go="home">← Games</button><h2>Codenames</h2></div>
+    <div class="panel stack rules"><h3>How to play</h3>
+      <ol>
+        <li>Split into a <b>Red</b> and a <b>Blue</b> team. Each team picks one spymaster.</li>
+        <li>Put this phone in the middle. It shows 25 words. Only the spymasters know which words belong to which team.</li>
+        <li>The spymasters open the site on their own phones, tap <b>Join a game</b> and enter the spymaster code to see the secret key.</li>
+        <li>On your turn, your spymaster says one word and a number, like "Food, 2", meaning two words on the board link to "food".</li>
+        <li>Your team taps words on this phone. Hit your own colour and keep guessing (up to the number + 1). Hit a neutral word or the other team's word and your turn ends.</li>
+        <li>The black word is the assassin. Tap it and your team loses straight away. The first team to find all its words wins.</li>
+      </ol>
+    </div>
+    <button class="big" id="cn-start">Deal a new board</button>
+  </div>
+
+  <div id="cn-game" class="hidden stack">
+    <div class="topbar"><h2>Codenames</h2><button class="ghost mini" id="cn-new">New board</button></div>
+    <div class="panel stack">
+      <div class="row between"><h3>Spymaster code</h3><button class="mini ghost" id="cn-showcode" type="button">Show</button></div>
+      <div id="cn-codebox" class="stack hidden" style="text-align:center">
+        <div class="gamecode" id="cn-code" style="font-size:clamp(30px,9vw,46px)"></div>
+        <p class="muted small">Only the two spymasters enter this under <b>Join a game</b>. Then hide it again.</p>
+      </div>
+    </div>
+    <div class="announce" id="cn-ann"></div>
+    <div class="cnscore"><span class="cnred" id="cn-left-red"></span><span class="cnblue" id="cn-left-blue"></span></div>
+    <div class="cngrid" id="cn-grid"></div>
+    <p class="muted small" style="text-align:center">Tap a word, then tap it again to reveal it.</p>
+    <button class="big ghost" id="cn-end">End our turn</button>
+    <div class="panel stack hidden" id="cn-keywrap"><h3>Full key</h3><div class="cngrid key" id="cn-fullkey"></div></div>
   </div>
 </section>
 
@@ -537,6 +592,7 @@ function decodeSeat(code){
   const seed = p % 4194304, gid = Math.floor(p / 4194304);
   if (gid > 3) return null;
   if (gid === 0 && seat === 63) return {gid, seed, n, x, seat: -1, shared: true};
+  if (gid === 0 && seat === 61) return {gid, seed, n, x, seat: -1, cnKey: true};
   if (seat >= n) return null;
   return {gid, seed, n, x, seat};
 }
@@ -582,7 +638,7 @@ function drawCodes(el, c, names){
 function pname(names, i){ return `Player ${i+1} (${names[i]})`; }
 
 /* ---------- routing ---------- */
-const views = ['home','mafia','join','charades','host'];
+const views = ['home','mafia','join','charades','host','codenames'];
 let H; // hosted-game state, set below
 function route(){
   const h = location.hash.replace('#','');
@@ -1102,6 +1158,7 @@ $('j-extra').addEventListener('click', e => {
   jRender(false);
 });
 function jRender(show){
+  if (J.c.cnKey) return cnKeyRender(show);
   const c = J.c, seat = c.seat, who = c.shared ? J.name : `Player ${seat+1}`;
   let cls = 'villager', name = '', te = '', desc = '', team = '', extra = '', rextra = '', for2 = `${who}, you are`, cover = `${who}, your card is hidden`;
   $('j-gameinfo').textContent = c.shared ? `Mafia · ${c.n} players` : `${GAME_NAMES[c.gid]} · ${who} of ${c.n}`;
@@ -1151,6 +1208,95 @@ function jRender(show){
   $('j-toggle').className = 'big' + (show ? ' red' : '');
   J.showing = show;
 }
+/* =================================================
+   CODENAMES (Telugu word list)
+   ================================================= */
+const CN_WORDS = ['Biryani','Mirchi','Mango','Pickle','Temple','Cinema','Hero','Villain','Auto','Bus','Train','Metro','Charminar','Godavari',
+  'Tirupati','Laddu','Kite','Sankranti','Ugadi','Wedding','Saree','Lungi','Bangle','Jasmine','Coconut','Banana','Tamarind','Jaggery','Rice',
+  'Dosa','Idli','Chai','Coffee','Tiffin','Hostel','Exam','Cricket','Kabaddi','Bat','Ball','Phone','Laptop','Visa','America','Manager',
+  'Boss','Uncle','Aunty','Grandma','Cousin','Neighbour','Doctor','Police','Lawyer','Teacher','Farmer','Fisherman','Boat','River','Beach',
+  'Hill','Forest','Tiger','Snake','Cow','Buffalo','Rooster','Parrot','Monkey','Elephant','Lion','Peacock','Moon','Sun','Star','Rain',
+  'Storm','Fire','Water','Gold','Silver','Diamond','Crown','King','Queen','Sword','Shield','Arrow','Ghost','Magic','Dream','Song','Dance',
+  'Drum','Flute','Veena','Camera','Director','Climax','Interval','Ticket','Poster','Fan','Whistle','Dialogue','Fight','Love','Palace',
+  'Fort','Market','Shop','Bank','Money','Gift','Party','Cake','Balloon','Bike','Car','Helmet','Road','Bridge','Tower','Clock','Mirror',
+  'Door','Key','Lock','Bed','Pillow','Umbrella','Shoe','Watch','Ring','Necklace','Spice','Salt','Sugar','Ghee','Curd','Lemon','Onion',
+  'Potato','Brinjal','Okra','Pan','Rangoli','Diya','Cracker','Holi','Bonalu','Bathukamma','Jathara','Rickshaw','Tractor','Well','Pond',
+  'Banyan','Neem','Tulasi','Cobra','Scorpion','Mosquito','Fever','Injection','Hospital','School','College','Library','Office','Court',
+  'Jail','Thief','Detective','Spy','Soldier','Pilot','Rocket','Satellite','Robot','Computer','Internet','Selfie','Reel','Meme','Gossip'];
+const CN = {};
+function cnDeal(seed){
+  const r = rng(seed, 33);
+  const words = shuffleR(CN_WORDS, r).slice(0, 25);
+  const first = r() < .5 ? 'red' : 'blue', second = first === 'red' ? 'blue' : 'red';
+  const key = shuffleR([...Array(9).fill(first), ...Array(8).fill(second), ...Array(7).fill('neutral'), 'assassin'], r);
+  return {words, key, first};
+}
+const TEAM = {red:'Red', blue:'Blue'};
+function cnShow(which){ ['cn-setup','cn-game'].forEach(x => $(x).classList.toggle('hidden', x !== which)); window.scrollTo(0,0); }
+function cnNew(){
+  const seed = rand(4194304), d = cnDeal(seed);
+  Object.assign(CN, d, {seed, revealed: new Set(), turn: d.first, over: false, arm: -1});
+  $('cn-code').textContent = encodeSeat({gid:0, seed, n:4, x:0}, 61);
+  $('cn-codebox').classList.add('hidden'); $('cn-showcode').textContent = 'Show';
+  $('cn-keywrap').classList.add('hidden');
+  cnShow('cn-game'); cnRender(`${TEAM[CN.turn]} team goes first. ${TEAM[CN.turn]} spymaster, give your clue.`);
+}
+function cnLeft(team){ return CN.key.filter((k,i) => k === team && !CN.revealed.has(i)).length; }
+function cnRender(msg){
+  if (msg !== undefined){ $('cn-ann').textContent = msg; }
+  $('cn-ann').className = 'announce ' + (CN.over ? (CN.winner || '') + ' win' : CN.turn);
+  $('cn-left-red').textContent = `Red: ${cnLeft('red')} left`;
+  $('cn-left-blue').textContent = `Blue: ${cnLeft('blue')} left`;
+  $('cn-grid').innerHTML = CN.words.map((w,i) => {
+    const rev = CN.revealed.has(i) || CN.over;
+    const cls = rev ? CN.key[i] + (CN.revealed.has(i) ? ' done' : '') : (CN.arm === i ? 'armed' : '');
+    const label = CN.key[i] === 'assassin' && rev ? '☠ ' + esc(w) : esc(w);
+    return `<button type="button" class="${cls}" data-i="${i}" ${rev ? 'disabled' : ''} style="${CN.over && !CN.revealed.has(i) ? 'opacity:.55' : ''}">${label}</button>`;
+  }).join('');
+  $('cn-end').disabled = CN.over;
+}
+$('cn-start').addEventListener('click', cnNew);
+$('cn-new').addEventListener('click', e => twoTap(e.currentTarget, 'Tap again for a new board', cnNew));
+$('cn-showcode').addEventListener('click', () => {
+  const box = $('cn-codebox'), hid = box.classList.toggle('hidden');
+  $('cn-showcode').textContent = hid ? 'Show' : 'Hide';
+});
+$('cn-end').addEventListener('click', () => {
+  if (CN.over) return;
+  CN.turn = CN.turn === 'red' ? 'blue' : 'red'; CN.arm = -1;
+  cnRender(`${TEAM[CN.turn]} team's turn. ${TEAM[CN.turn]} spymaster, give your clue.`);
+});
+$('cn-grid').addEventListener('click', e => {
+  const b = e.target.closest('[data-i]'); if (!b || CN.over) return;
+  const i = +b.dataset.i; if (CN.revealed.has(i)) return;
+  if (CN.arm !== i){ CN.arm = i; cnRender(); return; }
+  CN.arm = -1; CN.revealed.add(i);
+  const k = CN.key[i], me = CN.turn, them = me === 'red' ? 'blue' : 'red', w = CN.words[i];
+  if (k === 'assassin'){ CN.over = true; CN.winner = them; beep(180,.7); cnRender(`☠ ${w} was the assassin! ${TEAM[them]} team wins.`); return; }
+  if (cnLeft('red') === 0 || cnLeft('blue') === 0){
+    CN.winner = cnLeft('red') === 0 ? 'red' : 'blue'; CN.over = true; beep(1046,.15); setTimeout(() => beep(1318,.25), 150);
+    cnRender(`${TEAM[CN.winner]} team found all their words and wins!`); return;
+  }
+  if (k === me){ beep(880,.1); cnRender(`${w} is ${TEAM[me]}! Keep guessing, or end your turn.`); return; }
+  CN.turn = them; beep(300,.25);
+  cnRender(`${w} is ${k === 'neutral' ? 'a neutral word' : TEAM[k] + "'s word"}. ${TEAM[them]} team's turn now.`);
+});
+function cnKeyRender(show){
+  const d = cnDeal(J.c.seed);
+  $('j-gameinfo').textContent = 'Codenames · spymaster';
+  $('j-extra').innerHTML = '';
+  $('j-for').textContent = 'Spymaster key is hidden'; $('j-for2').textContent = 'Spymaster key';
+  $('j-card').className = 'rolecard' + (show ? ' role-villager' : '');
+  $('j-rname').textContent = `${TEAM[d.first]} goes first`; $('j-rte').textContent = '';
+  $('j-rdesc').textContent = `Red has ${d.first === 'red' ? 9 : 8} words, Blue has ${d.first === 'blue' ? 9 : 8}. Black is the assassin. Never let the guessers see this screen.`;
+  $('j-rteam').textContent = '';
+  $('j-rextra').innerHTML = `<div class="cngrid key" style="margin-top:14px">${d.words.map((w,i) => `<div class="${d.key[i]}">${d.key[i] === 'assassin' ? '☠ ' : ''}${esc(w)}</div>`).join('')}</div>`;
+  $('j-covered').classList.toggle('hidden', show); $('j-shown').classList.toggle('hidden', !show);
+  $('j-toggle').textContent = show ? 'Hide the key' : 'Show the key';
+  $('j-toggle').className = 'big' + (show ? ' red' : '');
+  J.showing = show;
+}
+
 (function joinFromLinkOrMemory(){
   let code = null, g = null, n = null;
   try{ const q = new URLSearchParams(location.search); code = q.get('p'); g = q.get('g'); n = q.get('n'); }catch(e){}
