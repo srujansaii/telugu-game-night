@@ -183,7 +183,8 @@ footer{margin-top:28px;text-align:center;font-size:13px;color:var(--muted)}
 .revlist li.bad{border:1.5px solid var(--kumkum)}
 .timer.small{font-size:64px}
 .cngrid{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
-.cngrid button,.cngrid div{min-height:56px;padding:4px 2px;border-radius:8px;font-family:var(--body);font-weight:700;font-size:clamp(11px,3.1vw,15px);line-height:1.1;text-transform:uppercase;letter-spacing:.01em;background:#efe3cf;color:#2a0d00;border:2px solid transparent;display:flex;align-items:center;justify-content:center;text-align:center;overflow-wrap:anywhere;hyphens:auto}
+.cngrid button,.cngrid div{min-height:56px;padding:4px 2px;border-radius:8px;font-family:var(--body);font-weight:700;font-size:clamp(11px,3.1vw,15px);line-height:1.1;text-transform:uppercase;letter-spacing:.01em;background:#efe3cf;color:#2a0d00;border:2px solid transparent;display:flex;align-items:center;justify-content:center;text-align:center;overflow-wrap:normal;word-break:normal}
+.cngrid .long{font-size:clamp(9px,2.45vw,13px);letter-spacing:0}
 .cngrid button.armed{border-color:var(--turmeric);box-shadow:0 0 0 3px rgba(245,184,46,.45);background:#fff4dc}
 .cngrid .red{background:var(--kumkum);color:#fff}
 .cngrid .blue{background:#3b6fd4;color:#fff}
@@ -1250,8 +1251,9 @@ function cnRender(msg){
   $('cn-grid').innerHTML = CN.words.map((w,i) => {
     const rev = CN.revealed.has(i) || CN.over;
     const cls = rev ? CN.key[i] + (CN.revealed.has(i) ? ' done' : '') : (CN.arm === i ? 'armed' : '');
+    const long = w.length > 7 ? ' long' : '';
     const label = CN.key[i] === 'assassin' && rev ? '☠ ' + esc(w) : esc(w);
-    return `<button type="button" class="${cls}" data-i="${i}" ${rev ? 'disabled' : ''} style="${CN.over && !CN.revealed.has(i) ? 'opacity:.55' : ''}">${label}</button>`;
+    return `<button type="button" class="${cls}${long}" data-i="${i}" ${rev ? 'disabled' : ''} style="${CN.over && !CN.revealed.has(i) ? 'opacity:.55' : ''}">${label}</button>`;
   }).join('');
   $('cn-end').disabled = CN.over;
 }
@@ -1290,7 +1292,7 @@ function cnKeyRender(show){
   $('j-rname').textContent = `${TEAM[d.first]} goes first`; $('j-rte').textContent = '';
   $('j-rdesc').textContent = `Red has ${d.first === 'red' ? 9 : 8} words, Blue has ${d.first === 'blue' ? 9 : 8}. Black is the assassin. Never let the guessers see this screen.`;
   $('j-rteam').textContent = '';
-  $('j-rextra').innerHTML = `<div class="cngrid key" style="margin-top:14px">${d.words.map((w,i) => `<div class="${d.key[i]}">${d.key[i] === 'assassin' ? '☠ ' : ''}${esc(w)}</div>`).join('')}</div>`;
+  $('j-rextra').innerHTML = `<div class="cngrid key" style="margin-top:14px">${d.words.map((w,i) => `<div class="${d.key[i]}${w.length > 7 ? ' long' : ''}">${d.key[i] === 'assassin' ? '☠ ' : ''}${esc(w)}</div>`).join('')}</div>`;
   $('j-covered').classList.toggle('hidden', show); $('j-shown').classList.toggle('hidden', !show);
   $('j-toggle').textContent = show ? 'Hide the key' : 'Show the key';
   $('j-toggle').className = 'big' + (show ? ' red' : '');
