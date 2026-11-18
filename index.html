@@ -197,7 +197,7 @@ footer{margin-top:28px;text-align:center;font-size:13px;color:var(--muted)}
   <button class="gamecard" data-go="join">
     <span class="tag">Player · on your own phone</span>
     <h2>Join a game</h2>
-    <p>Got a secret code from the host? Enter it to see your role. Works for every game.</p>
+    <p>Got a code from the host? Enter it to see your card. Works for every game.</p>
   </button>
 
   <p class="sectionlabel">Host a game</p>
@@ -258,16 +258,19 @@ footer{margin-top:28px;text-align:center;font-size:13px;color:var(--muted)}
       <p id="m-error" class="error"></p>
     </div>
 
-    <button class="big" id="m-start">Deal roles &amp; make secret codes</button>
+    <button class="big" id="m-start">Deal roles &amp; get game code</button>
   </div>
 
   <div id="m-game" class="hidden stack">
     <div class="topbar"><h2>Narrator</h2><button class="ghost mini" id="m-newgame">New game</button></div>
 
-    <div class="panel stack">
-      <h3>Secret codes</h3>
-      <p class="muted small">Each player gets their own code, which shows only their role. Tap <b>Send</b> to text it to them, or read it to them privately. They open this site, tap <b>Join a game</b> and enter it. Read the numbers out loud so the Mafia can find their teammates.</p>
-      <div class="codes" id="m-codes"></div>
+    <div class="panel stack codebox">
+      <h3>Game code</h3>
+      <p class="muted small">Everyone opens this site on their own phone, taps <b>Join a game</b>, enters this code and types their own name. Each phone shows only that person's role.</p>
+      <div class="gamecode" id="m-code"></div>
+      <button class="mini" id="m-share" type="button">Share game link</button>
+      <p class="muted small">Players type their name the way it's listed here. Capitals and spaces don't matter.</p>
+      <div class="chips" id="m-namechips" style="justify-content:center"></div>
     </div>
 
     <div id="m-announce" class="announce hidden" role="status"></div>
@@ -348,10 +351,18 @@ footer{margin-top:28px;text-align:center;font-size:13px;color:var(--muted)}
   <div id="j-enter" class="stack">
     <div class="topbar"><button class="ghost mini" data-go="home">← Games</button><h2>Join a game</h2></div>
     <form id="j-form" class="panel stack">
-      <label for="j-code">Your secret code from the host</label>
+      <label for="j-code">Code from the host</label>
       <input id="j-code" type="text" placeholder="ABCDE-FGHJK" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="14" style="font-family:var(--display);font-size:28px;letter-spacing:.1em;text-transform:uppercase">
       <p id="j-err" class="error"></p>
-      <button class="big" type="submit">Show my card</button>
+      <button class="big" type="submit">Next</button>
+    </form>
+    <form id="j-nameform" class="panel stack hidden">
+      <p><span class="badge">Mafia</span></p>
+      <label for="j-name">Type your name</label>
+      <input id="j-name" type="text" placeholder="Your name" autocomplete="off" maxlength="20">
+      <p class="muted small" id="j-namehint"></p>
+      <p id="j-nerr" class="error"></p>
+      <button class="big" type="submit">Show my role</button>
     </form>
   </div>
 
@@ -524,7 +535,9 @@ function decodeSeat(code){
   const x = p % 64; p = Math.floor(p/64);
   const n = p % 32 + 4; p = Math.floor(p/32);
   const seed = p % 4194304, gid = Math.floor(p / 4194304);
-  if (gid > 3 || seat >= n) return null;
+  if (gid > 3) return null;
+  if (gid === 0 && seat === 63) return {gid, seed, n, x, seat: -1, shared: true};
+  if (seat >= n) return null;
   return {gid, seed, n, x, seat};
 }
 
@@ -540,9 +553,9 @@ function drawRoster(p){
 function bindRoster(p, onChange){
   $(p+'-addform').addEventListener('submit', e => {
     e.preventDefault();
-    const raw = $(p+'-name').value.trim().replace(/\s+/g,' ');
-    if (!raw) return;
-    if (PLAYERS.some(x => x.toLowerCase() === raw.toLowerCase())){ $(p+'-error').textContent = `"${raw}" is already in. Add a surname or initial.`; return; }
+    const raw = $(p+'-name').value.replace(/\|/g,'').trim().replace(/\s+/g,' ');
+    if (!raw || !normName(raw)) return;
+    if (PLAYERS.some(x => normName(x) === normName(raw))){ $(p+'-error').textContent = `"${raw}" is already in. Add a surname or initial.`; return; }
     if (PLAYERS.length >= 35){ $(p+'-error').textContent = 'Max 35 players.'; return; }
     PLAYERS.push(raw); savePlayers(); $(p+'-name').value = ''; $(p+'-name').focus(); onChange();
   });
@@ -600,14 +613,33 @@ const M = { mafiaCount: 1, deal: [], alive: {}, night: 1, peek: false, voteArm: 
 let mafiaTouched = false;
 function mDefaultMafia(n){ return Math.max(1, Math.floor(n/4)); }
 function mafiaOpts(c){ const f = c.x % 8; return {seed:c.seed, n:c.n, mc:Math.floor(c.x/8)+1, gf:!!(f&4), doc:!!(f&2), det:!!(f&1)}; }
-function dealRoles(g){ // role per seat, identical on every phone
-  const roles = [];
-  if (g.gf){ roles.push('godfather'); for (let i=1;i<g.mc;i++) roles.push('mafia'); }
-  else for (let i=0;i<g.mc;i++) roles.push('mafia');
-  if (g.doc) roles.push('doctor');
-  if (g.det) roles.push('detective');
-  while (roles.length < g.n) roles.push('villager');
-  return shuffleR(roles, rng(g.seed, 1));
+/* One shared Mafia code. A player's role comes from the code + their typed name.
+   The narrator's phone searches for a deal where the entered names land on exactly the chosen roles. */
+function normName(s){ return String(s).normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]/gu,''); }
+function hashName(seed, nm){
+  let h = (0x811c9dc5 ^ Math.imul(seed, 0x9e3779b1)) >>> 0;
+  for (let i=0;i<nm.length;i++){ h ^= nm.charCodeAt(i); h = Math.imul(h, 0x01000193); }
+  h ^= h >>> 16; h = Math.imul(h, 0x85ebca6b); h ^= h >>> 13; h = Math.imul(h, 0xc2b2ae35); h ^= h >>> 16;
+  return (h >>> 0) / 4294967296;
+}
+function mafiaBuckets(o){
+  const b = [];
+  if (o.gf){ b.push(['godfather',1]); if (o.mc > 1) b.push(['mafia', o.mc-1]); } else b.push(['mafia', o.mc]);
+  if (o.doc) b.push(['doctor',1]);
+  if (o.det) b.push(['detective',1]);
+  b.push(['villager', o.n - o.mc - (o.doc?1:0) - (o.det?1:0)]);
+  return b;
+}
+function roleFromU(o, u){ let cum = 0; for (const [r,k] of mafiaBuckets(o)){ cum += k / o.n; if (u < cum) return r; } return 'villager'; }
+function mafiaRoleOf(c, name){ const o = mafiaOpts(c); return roleFromU(o, hashName(c.seed, normName(name))); }
+function findMafiaSeed(o, names){
+  const keys = names.map(normName), want = mafiaBuckets(o), start = rand(4194304);
+  for (let t=0;t<4194304;t++){
+    const seed = (start + t) % 4194304, got = {};
+    for (const k of keys){ const r = roleFromU(o, hashName(seed, k)); got[r] = (got[r]||0) + 1; }
+    if (want.every(([r,k]) => (got[r]||0) === k)) return seed;
+  }
+  return -1;
 }
 
 function mRenderSetup(){
@@ -643,15 +675,27 @@ function mShow(which){ ['m-setup','m-game'].forEach(x => $(x).classList.toggle('
 $('m-start').addEventListener('click', () => {
   if (mValidate().error || PLAYERS.length < 4) return;
   const gf = $('m-gf').checked, doc = $('m-doc').checked, det = $('m-det').checked;
-  const c = {gid:0, seed: rand(4194304), n: PLAYERS.length, x: (M.mafiaCount-1)*8 + (gf?4:0) + (doc?2:0) + (det?1:0)};
-  const dealt = dealRoles(mafiaOpts(c));
-  M.c = c; M.names = PLAYERS.slice();
-  M.deal = M.names.map((name,i) => ({name, role: dealt[i]}));
+  const x = (M.mafiaCount-1)*8 + (gf?4:0) + (doc?2:0) + (det?1:0);
+  const seed = findMafiaSeed({n: PLAYERS.length, mc: M.mafiaCount, gf, doc, det}, PLAYERS);
+  if (seed < 0){ $('m-error').textContent = "Couldn't deal these roles. Try again."; return; }
+  const c = {gid:0, seed, n: PLAYERS.length, x};
+  M.c = c; M.names = PLAYERS.slice(); M.code = encodeSeat(c, 63);
+  M.deal = M.names.map(name => ({name, role: mafiaRoleOf(c, name)}));
   M.alive = {}; M.deal.forEach(p => M.alive[p.name] = true);
   M.night = 1; M.peek = false; M.over = false; M.log = [];
-  drawCodes($('m-codes'), c, M.names);
+  $('m-code').textContent = M.code;
+  $('m-namechips').innerHTML = M.names.map(nm => `<span class="chip" style="padding-right:14px">${esc(nm)}</span>`).join('');
   $('m-announce').className = 'announce hidden';
   mShow('m-game'); mLog('Roles dealt. Night 1 begins once everyone has seen their role.'); mSetPhase('night');
+});
+
+$('m-share').addEventListener('click', async () => {
+  const b = $('m-share');
+  const link = location.origin + location.pathname + '?g=' + M.code + '&n=' + encodeURIComponent(M.names.join('|'));
+  const text = `Telugu Game Night · Mafia\nGame code: ${M.code}\nJoin here, then type your name: ${link}`;
+  try{ if (navigator.share){ await navigator.share({text}); return; } }catch(err){ if (err && err.name === 'AbortError') return; }
+  try{ await navigator.clipboard.writeText(text); b.textContent = 'Copied! Paste it in your group chat'; }catch(err){ b.textContent = 'Read the code out instead'; }
+  setTimeout(() => b.textContent = 'Share game link', 2500);
 });
 
 function aliveList(){ return M.deal.filter(p => M.alive[p.name]); }
@@ -676,7 +720,7 @@ function mRenderGame(){
   $('m-checkwrap').classList.toggle('hidden', !aliveRole('detective'));
   $('m-checkres').classList.add('hidden');
   $('m-nightno').textContent = M.night;
-  const steps = ['Everyone, close your eyes.', 'Mafia' + (aliveRole('godfather') ? ' and Godfather' : '') + ', open your eyes. Silently point at who to kill. Close your eyes.'];
+  const steps = ['Everyone, close your eyes.', 'Mafia' + (aliveRole('godfather') ? ' and Godfather' : '') + ', open your eyes.' + (M.night === 1 ? ' Look around and see who is on your team.' : '') + ' Silently point at who to kill. Close your eyes.'];
   if (aliveRole('doctor')) steps.push('Doctor, open your eyes. Point at who to save. Close your eyes.');
   if (aliveRole('detective')) steps.push('Police, open your eyes. Point at someone. (Nod yes for Mafia, shake no otherwise.) Close your eyes.');
   steps.push('Everyone, wake up!');
@@ -1022,21 +1066,33 @@ $('h-panel').addEventListener('click', e => {
 /* =================================================
    JOIN: a player's own phone
    ================================================= */
-const J = {c:null, code:'', round:1, showing:false};
+const J = {c:null, code:'', round:1, showing:false, name:'', names:null, linkCode:'', linkNames:null};
 function jShow(which){ ['j-enter','j-role'].forEach(x => $(x).classList.toggle('hidden', x !== which)); window.scrollTo(0,0); }
-function jOpen(code){
+function jOpen(code, name){
   const c = decodeSeat(code);
-  if (!c){ $('j-err').textContent = "That code doesn't look right. Check the 10 letters and numbers with the host."; return false; }
-  $('j-err').textContent = '';
+  if (!c){ $('j-err').textContent = "That code doesn't look right. Check the 10 letters and numbers with the host."; $('j-nameform').classList.add('hidden'); return false; }
+  $('j-err').textContent = ''; $('j-nerr').textContent = '';
   const clean = code.toUpperCase().replace(/[^A-Z0-9]/g,'');
   J.c = c; J.code = clean.slice(0,5) + '-' + clean.slice(5);
+  J.names = J.linkCode === J.code ? J.linkNames : null;
+  if (c.shared){
+    if (!name || !normName(name)){
+      $('j-nameform').classList.remove('hidden');
+      $('j-namehint').textContent = J.names ? 'Players in this game: ' + J.names.join(', ') : "Type it the way the narrator entered it. Capitals and spaces don't matter.";
+      jShow('j-enter'); $('j-name').focus();
+      return false;
+    }
+    if (J.names && !J.names.some(x => normName(x) === normName(name))){ $('j-nerr').textContent = `"${name}" isn't in this game. Check the spelling with the narrator.`; return false; }
+    J.name = name.trim().replace(/\s+/g,' ');
+  } else $('j-nameform').classList.add('hidden');
   const saved = store.get('tgn_join', null);
   J.round = saved && saved.code === J.code ? (saved.round || 1) : 1;
-  store.set('tgn_join', {code: J.code, round: J.round});
+  store.set('tgn_join', {code: J.code, round: J.round, name: c.shared ? J.name : ''});
   jRender(false); jShow('j-role');
   return true;
 }
-$('j-form').addEventListener('submit', e => { e.preventDefault(); jOpen($('j-code').value); });
+$('j-form').addEventListener('submit', e => { e.preventDefault(); $('j-name').value = ''; jOpen($('j-code').value); });
+$('j-nameform').addEventListener('submit', e => { e.preventDefault(); jOpen($('j-code').value, $('j-name').value); });
 $('j-back').addEventListener('click', () => { jShow('j-enter'); });
 $('j-toggle').addEventListener('click', () => jRender(!J.showing));
 $('j-extra').addEventListener('click', e => {
@@ -1046,17 +1102,13 @@ $('j-extra').addEventListener('click', e => {
   jRender(false);
 });
 function jRender(show){
-  const c = J.c, seat = c.seat, who = `Player ${seat+1}`;
+  const c = J.c, seat = c.seat, who = c.shared ? J.name : `Player ${seat+1}`;
   let cls = 'villager', name = '', te = '', desc = '', team = '', extra = '', rextra = '', for2 = `${who}, you are`, cover = `${who}, your card is hidden`;
-  $('j-gameinfo').textContent = `${GAME_NAMES[c.gid]} · ${who} of ${c.n}`;
+  $('j-gameinfo').textContent = c.shared ? `Mafia · ${c.n} players` : `${GAME_NAMES[c.gid]} · ${who} of ${c.n}`;
   if (c.gid === 0){
-    const roles = dealRoles(mafiaOpts(c)), role = roles[seat], r = ROLES[role];
+    const role = mafiaRoleOf(c, J.name), r = ROLES[role], mc = mafiaOpts(c).mc;
     cls = role; name = r.name; te = r.te; desc = r.desc;
-    if (r.team === 'mafia'){
-      const mates = roles.map((x,i) => ({x,i})).filter(o => o.i !== seat && ROLES[o.x].team === 'mafia')
-        .map(o => 'Player ' + (o.i+1) + (o.x === 'godfather' ? ' (Godfather)' : ''));
-      team = mates.length ? 'Your gang: ' + mates.join(', ') : 'You are working alone. Good luck.';
-    }
+    if (r.team === 'mafia') team = mc > 1 ? `There are ${mc} of you on the Mafia team. You'll see each other when the narrator says "Mafia, open your eyes" on night 1.` : 'You are the only Mafia. Good luck.';
   } else if (c.gid === 1){
     const d = spyDeal(c);
     if (d.spies.has(seat)){
@@ -1100,11 +1152,19 @@ function jRender(show){
   J.showing = show;
 }
 (function joinFromLinkOrMemory(){
-  let code = null;
-  try{ code = new URLSearchParams(location.search).get('p'); }catch(e){}
+  let code = null, g = null, n = null;
+  try{ const q = new URLSearchParams(location.search); code = q.get('p'); g = q.get('g'); n = q.get('n'); }catch(e){}
+  if (g){
+    const clean = g.toUpperCase().replace(/[^A-Z0-9]/g,'');
+    J.linkCode = clean.slice(0,5) + '-' + clean.slice(5); J.linkNames = n ? n.split('|').filter(Boolean) : null;
+    $('j-code').value = J.linkCode;
+    const s = store.get('tgn_join', null);
+    jOpen(J.linkCode, s && s.code === J.linkCode ? s.name : '');
+    location.hash = 'join'; return;
+  }
   if (code){ $('j-code').value = code; if (jOpen(code)){ location.hash = 'join'; } return; }
   const s = store.get('tgn_join', null);
-  if (s && s.code && decodeSeat(s.code)){ $('j-code').value = s.code; jOpen(s.code); }
+  if (s && s.code && decodeSeat(s.code)){ $('j-code').value = s.code; if (s.name) $('j-name').value = s.name; jOpen(s.code, s.name); }
 })();
 
 /* =================================================
