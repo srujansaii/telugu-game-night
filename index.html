@@ -198,9 +198,23 @@ footer{margin-top:28px;text-align:center;font-size:13px;color:var(--muted)}
 .cnblue{background:#3b6fd4;color:#fff}
 .announce.red{background:var(--kumkum);color:#fff}
 .announce.blue{background:#3b6fd4;color:#fff}
+/* ---- background + tap waves ---- */
+#bg{position:fixed;inset:0;width:100%;height:100%;z-index:0;pointer-events:none;display:block}
+.wrap{position:relative;z-index:1}
+.panel,.gamecard{background:rgba(42,18,25,.78);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+h1{text-shadow:0 0 28px rgba(245,184,46,.35)}
+button{position:relative;overflow:hidden;isolation:isolate;-webkit-tap-highlight-color:transparent}
+.ripple{position:absolute;border-radius:50%;background:currentColor;opacity:.3;transform:scale(0);animation:ripple .65s cubic-bezier(.2,.7,.3,1) forwards;pointer-events:none;z-index:0}
+@keyframes ripple{to{transform:scale(1);opacity:0}}
+#fx{position:fixed;inset:0;pointer-events:none;z-index:60;overflow:hidden}
+.wave{position:absolute;width:18px;height:18px;margin:-9px 0 0 -9px;border-radius:50%;border:2px solid rgba(245,184,46,.9);box-shadow:0 0 14px rgba(245,184,46,.5),inset 0 0 8px rgba(245,184,46,.35);opacity:0;animation:wave .95s cubic-bezier(.15,.6,.3,1) both}
+.wave.w2{border-color:rgba(224,64,47,.75);box-shadow:0 0 12px rgba(224,64,47,.45)}
+@keyframes wave{0%{transform:scale(.15);opacity:.95}100%{transform:scale(8);opacity:0}}
 </style>
 </head>
 <body>
+<canvas id="bg" aria-hidden="true"></canvas>
+<div id="fx" aria-hidden="true"></div>
 <div class="wrap">
 
 <!-- ============ HOME ============ -->
@@ -1442,6 +1456,89 @@ function cFinal(){
 }
 $('c-quit').addEventListener('click', cFinal);
 $('c-again').addEventListener('click', () => { $('c-play').classList.add('hidden'); $('c-setup').classList.remove('hidden'); window.scrollTo(0,0); });
+
+/* =================================================
+   BACKGROUND: floating lanterns over a slowly turning rangoli
+   ================================================= */
+(function background(){
+  const cv = $('bg'); const ctx = cv && cv.getContext ? cv.getContext('2d') : null; if (!ctx) return;
+  let reduce = false; try{ reduce = matchMedia('(prefers-reduced-motion: reduce)').matches; }catch(e){}
+  const COLS = ['245,184,46','224,64,47','248,239,228','255,150,70'];
+  let W = 0, H = 0, parts = [], raf = 0, last = 0, t = 0;
+  function mk(anywhere){
+    return {x: Math.random()*W, y: anywhere ? Math.random()*H : H + 30, r: 1.2 + Math.random()*3.2, vy: 8 + Math.random()*18,
+      sway: Math.random()*6.28, sw: .35 + Math.random()*.8, c: COLS[(Math.random()*COLS.length)|0], a: .22 + Math.random()*.45, tw: Math.random()*6.28};
+  }
+  function resize(){
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    W = window.innerWidth; H = window.innerHeight;
+    cv.width = Math.round(W*dpr); cv.height = Math.round(H*dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const n = Math.round(Math.min(48, Math.max(18, W*H/24000)));
+    parts = Array.from({length:n}, () => mk(true));
+  }
+  function rangoli(){
+    const R = Math.min(Math.max(W, H)*.42, 520), cx = W/2, cy = Math.min(H*.2, 170);
+    ctx.save(); ctx.translate(cx, cy); ctx.rotate(t*.025); ctx.lineWidth = 1;
+    for (let ring=1; ring<=4; ring++){
+      const rr = R*ring/4, petals = 6 + ring*4, steps = petals*14;
+      ctx.strokeStyle = `rgba(245,184,46,${.075 - ring*.011})`;
+      ctx.beginPath();
+      for (let i=0;i<=steps;i++){
+        const a = i/steps*Math.PI*2, rad = rr*(.9 + .1*Math.cos(a*petals));
+        const x = Math.cos(a)*rad, y = Math.sin(a)*rad;
+        if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y);
+      }
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+  function draw(dt){
+    ctx.clearRect(0, 0, W, H);
+    rangoli();
+    for (const p of parts){
+      p.y -= p.vy*dt; p.sway += dt*p.sw;
+      const x = p.x + Math.sin(p.sway)*16, glow = p.r*6, a = p.a*(.6 + .4*Math.sin(t*1.6 + p.tw));
+      const g = ctx.createRadialGradient(x, p.y, 0, x, p.y, glow);
+      g.addColorStop(0, `rgba(${p.c},${a})`); g.addColorStop(.35, `rgba(${p.c},${a*.35})`); g.addColorStop(1, `rgba(${p.c},0)`);
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, p.y, glow, 0, Math.PI*2); ctx.fill();
+      if (p.y < -40) Object.assign(p, mk(false));
+    }
+  }
+  function frame(now){
+    const dt = last ? Math.min(.05, (now - last)/1000) : 0; last = now; t += dt;
+    draw(dt); raf = requestAnimationFrame(frame);
+  }
+  function start(){ cancelAnimationFrame(raf); last = 0; if (reduce) draw(0); else raf = requestAnimationFrame(frame); }
+  let rt = 0;
+  window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { resize(); if (reduce) draw(0); }, 150); });
+  document.addEventListener('visibilitychange', () => { if (document.hidden) cancelAnimationFrame(raf); else start(); });
+  resize(); start();
+})();
+
+/* =================================================
+   TAP EFFECT: a ripple inside the button + water-drop waves around the tap
+   ================================================= */
+(function tapWaves(){
+  let reduce = false; try{ reduce = matchMedia('(prefers-reduced-motion: reduce)').matches; }catch(e){}
+  const fx = $('fx'); if (reduce || !fx) return;
+  document.addEventListener('pointerdown', e => {
+    const b = e.target.closest && e.target.closest('button'); if (!b || b.disabled) return;
+    const r = b.getBoundingClientRect(), size = Math.max(r.width, r.height)*2.2;
+    const s = document.createElement('span');
+    s.className = 'ripple'; s.style.width = s.style.height = size + 'px';
+    s.style.left = (e.clientX - r.left - size/2) + 'px'; s.style.top = (e.clientY - r.top - size/2) + 'px';
+    b.appendChild(s); s.addEventListener('animationend', () => s.remove());
+    setTimeout(() => s.remove(), 1200);
+    for (let i=0;i<3;i++){
+      const w = document.createElement('span');
+      w.className = 'wave' + (i === 1 ? ' w2' : '');
+      w.style.left = e.clientX + 'px'; w.style.top = e.clientY + 'px'; w.style.animationDelay = (i*.13) + 's';
+      fx.appendChild(w); w.addEventListener('animationend', () => w.remove());
+      setTimeout(() => w.remove(), 1800);
+    }
+  }, {passive: true});
+})();
 
 mRenderSetup();
 route();
