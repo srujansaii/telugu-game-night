@@ -210,6 +210,15 @@ button{position:relative;overflow:hidden;isolation:isolate;-webkit-tap-highlight
 .wave{position:absolute;width:18px;height:18px;margin:-9px 0 0 -9px;border-radius:50%;border:2px solid rgba(245,184,46,.9);box-shadow:0 0 14px rgba(245,184,46,.5),inset 0 0 8px rgba(245,184,46,.35);opacity:0;animation:wave .95s cubic-bezier(.15,.6,.3,1) both}
 .wave.w2{border-color:rgba(224,64,47,.75);box-shadow:0 0 12px rgba(224,64,47,.45)}
 @keyframes wave{0%{transform:scale(.15);opacity:.95}100%{transform:scale(8);opacity:0}}
+/* ---- Pictionary ---- */
+.padwrap{border-radius:14px;overflow:hidden;border:2px solid var(--line);box-shadow:0 6px 24px rgba(0,0,0,.35);background:#fffaf0}
+#p-canvas{display:block;width:100%;touch-action:none;cursor:crosshair;background:#fffaf0}
+.ptools{display:flex;flex-wrap:wrap;gap:8px;justify-content:center}
+.swatch{width:40px;height:40px;min-height:40px;padding:0;border-radius:50%;background:var(--sw);border:3px solid rgba(255,255,255,.25)}
+.swatch.on{border-color:#fff;box-shadow:0 0 0 3px var(--turmeric)}
+.ptools .tool.on{background:var(--turmeric);color:#2a0d00;border-color:var(--turmeric)}
+.ptimer{font-family:var(--display);font-size:40px;line-height:1;color:var(--turmeric);font-variant-numeric:tabular-nums}
+.ptimer.low{color:var(--kumkum);animation:pulse 1s infinite}
 </style>
 </head>
 <body>
@@ -255,6 +264,11 @@ button{position:relative;overflow:hidden;isolation:isolate;-webkit-tap-highlight
     <span class="tag new">New · 2 teams</span>
     <h2>Codenames</h2>
     <p>One phone is the board. Spymasters give one-word clues so their team finds their words.</p>
+  </button>
+  <button class="gamecard sm" data-go="pictionary">
+    <span class="tag new">New · 2 teams · one phone</span>
+    <h2>Pictionary</h2>
+    <p>Draw Telugu food, films and everyday things on the phone. Your team guesses before time runs out.</p>
   </button>
   <button class="gamecard sm" data-go="charades">
     <span class="tag">2 teams · one phone</span>
@@ -459,6 +473,108 @@ button{position:relative;overflow:hidden;isolation:isolate;-webkit-tap-highlight
   </div>
 </section>
 
+<!-- ============ PICTIONARY ============ -->
+<section id="v-pictionary" class="hidden">
+  <div id="p-setup" class="stack">
+    <div class="topbar"><button class="ghost mini" data-go="home">← Games</button><h2>Pictionary</h2></div>
+    <div class="panel stack rules"><h3>How to play</h3>
+      <ol>
+        <li>Split into two teams. Each turn, one person from the team draws.</li>
+        <li>Only the drawer looks at the word. Then they tap <b>Start drawing</b> and draw on this phone.</li>
+        <li>No letters, numbers or talking. The team shouts guesses before the timer runs out.</li>
+        <li>Guessed it? Tap <b>They got it</b> for a point. Then pass the phone to the other team.</li>
+      </ol>
+    </div>
+    <div class="panel stack">
+      <h3>Teams</h3>
+      <div class="row" style="flex-wrap:nowrap">
+        <input id="p-t1" type="text" value="Team Mirchi" maxlength="20" aria-label="Team 1 name">
+        <input id="p-t2" type="text" value="Team Laddu" maxlength="20" aria-label="Team 2 name">
+      </div>
+    </div>
+    <div class="panel stack">
+      <h3>Words</h3>
+      <div class="seg" id="p-cats">
+        <button type="button" data-cat="easy" aria-pressed="false">Easy things</button>
+        <button type="button" data-cat="telugu" aria-pressed="false">Telugu special</button>
+        <button type="button" data-cat="mixed" aria-pressed="true">Mixed</button>
+      </div>
+      <h3>Time to draw</h3>
+      <div class="seg" id="p-time">
+        <button type="button" data-t="45" aria-pressed="false">45s</button>
+        <button type="button" data-t="60" aria-pressed="true">60s</button>
+        <button type="button" data-t="90" aria-pressed="false">90s</button>
+      </div>
+      <h3>Turns per team</h3>
+      <div class="seg" id="p-rounds">
+        <button type="button" data-r="3" aria-pressed="true">3</button>
+        <button type="button" data-r="5" aria-pressed="false">5</button>
+        <button type="button" data-r="8" aria-pressed="false">8</button>
+        <button type="button" data-r="99" aria-pressed="false">∞</button>
+      </div>
+    </div>
+    <button class="big" id="p-start">Start game</button>
+  </div>
+
+  <div id="p-play" class="hidden stack">
+    <div class="topbar"><span class="muted" id="p-turninfo"></span><button class="ghost mini" id="p-quit">End game</button></div>
+    <div class="score">
+      <div class="team" id="p-s0"><div class="tname" id="p-n0"></div><div class="pts" id="p-p0">0</div></div>
+      <div class="team" id="p-s1"><div class="tname" id="p-n1"></div><div class="pts" id="p-p1">0</div></div>
+    </div>
+    <div id="p-hand" class="panel passcard stack">
+      <p class="muted">Next up</p>
+      <div class="who" id="p-handteam"></div>
+      <p class="muted">Pick a drawer. Only the drawer looks at the phone now.</p>
+      <button class="big" id="p-reveal">Drawer: show me the word</button>
+    </div>
+    <div id="p-word" class="panel stack hidden">
+      <div class="wordmeta"><span class="badge" id="p-wcat"></span></div>
+      <div class="word" id="p-wordtext"></div>
+      <button class="ghost" id="p-swap">Too hard · new word</button>
+      <button class="big" id="p-go">Start drawing</button>
+    </div>
+    <div id="p-draw" class="stack hidden">
+      <div class="row between" style="flex-wrap:nowrap">
+        <button class="mini ghost" id="p-peek" type="button">Peek at word</button>
+        <div class="ptimer" id="p-timer">60</div>
+      </div>
+      <div class="bar"><i id="p-bar"></i></div>
+      <div class="padwrap"><canvas id="p-canvas" aria-label="Drawing pad"></canvas></div>
+      <div class="ptools" id="p-tools">
+        <button type="button" class="swatch on" data-color="#2a0d00" style="--sw:#2a0d00" aria-label="Black"></button>
+        <button type="button" class="swatch" data-color="#e0402f" style="--sw:#e0402f" aria-label="Red"></button>
+        <button type="button" class="swatch" data-color="#2f6fd6" style="--sw:#2f6fd6" aria-label="Blue"></button>
+        <button type="button" class="swatch" data-color="#2f9a55" style="--sw:#2f9a55" aria-label="Green"></button>
+        <button type="button" class="swatch" data-color="#f2a900" style="--sw:#f2a900" aria-label="Yellow"></button>
+        <button type="button" class="swatch" data-color="#8a4b20" style="--sw:#8a4b20" aria-label="Brown"></button>
+      </div>
+      <div class="ptools">
+        <button type="button" class="mini ghost tool" data-size="3">Thin</button>
+        <button type="button" class="mini ghost tool on" data-size="7">Medium</button>
+        <button type="button" class="mini ghost tool" data-size="14">Thick</button>
+        <button type="button" class="mini ghost tool" data-act="eraser">Eraser</button>
+        <button type="button" class="mini ghost" data-act="undo">Undo</button>
+        <button type="button" class="mini ghost" data-act="clear">Clear</button>
+      </div>
+      <div class="row" style="flex-wrap:nowrap">
+        <button class="ghost" id="p-skip" style="flex:1">Give up</button>
+        <button class="green" id="p-got" style="flex:2">They got it! +1</button>
+      </div>
+    </div>
+    <div id="p-result" class="panel stack hidden">
+      <p class="muted" id="p-resmsg"></p>
+      <div class="word" id="p-resword"></div>
+      <button class="big" id="p-next">Next team</button>
+    </div>
+    <div id="p-final" class="hidden stack">
+      <div class="announce win" id="p-winner"></div>
+      <button class="big" id="p-again">Play again</button>
+      <button class="ghost" data-go="home">Back to games</button>
+    </div>
+  </div>
+</section>
+
 <!-- ============ CHARADES ============ -->
 <section id="v-charades" class="hidden">
   <div id="c-setup" class="stack">
@@ -653,7 +769,7 @@ function drawCodes(el, c, names){
 function pname(names, i){ return `Player ${i+1} (${names[i]})`; }
 
 /* ---------- routing ---------- */
-const views = ['home','mafia','join','charades','host','codenames'];
+const views = ['home','mafia','join','charades','host','codenames','pictionary'];
 let H; // hosted-game state, set below
 function route(){
   const h = location.hash.replace('#','');
@@ -1456,6 +1572,154 @@ function cFinal(){
 }
 $('c-quit').addEventListener('click', cFinal);
 $('c-again').addEventListener('click', () => { $('c-play').classList.add('hidden'); $('c-setup').classList.remove('hidden'); window.scrollTo(0,0); });
+
+/* =================================================
+   PICTIONARY (one phone is the drawing pad)
+   ================================================= */
+const PIC_WORDS = {
+easy:['Kite','Umbrella','Coconut tree','Auto rickshaw','Temple','Mango','Banana','Bicycle','Elephant','Peacock','Cricket bat','Diya','Rangoli',
+  'Saree','Laddu','Dosa','Chai glass','Bullock cart','Snake','Tiger','Cow','Rooster','Fish','Boat','Rocket','Moon','Sun','Rainbow','Clock',
+  'Spectacles','Phone','Laptop','Car','Bus','Train','Aeroplane','House','Flower','Ghost','Crown','Sword','Guitar','Drum','Flute','Camera',
+  'Ice cream','Cake','Balloon','Gift box','Ring','Shoe','Watch','Key','Bed','Chair','Ceiling fan','TV','Bridge','Mountain','River','Beach',
+  'Well','Tractor','Helmet','Mirchi','Lemon','Onion','Brinjal','Pressure cooker','Mosquito','Spider','Monkey','Parrot','Lotus','Bangles',
+  'Selfie','Popcorn','Whistle','Toothbrush','Scooter','Butterfly','Snowman','Lion','Football','Candle','Ladder','Scissors','Book','Pencil'],
+telugu:['Charminar','Tirupati laddu','Bathukamma','Bonalu','Sankranti kite','Gangireddu','Pootharekulu','Pesarattu','Biryani handi',
+  'Irani chai','Osmania biscuit','Hyderabad Metro','Godavari bridge','Mirchi bajji','Avakaya jar','Banana leaf meal','Pushpa',
+  'Baahubali','RRR','Naatu Naatu','Eega','Magadheera','Golconda Fort','Hussain Sagar Buddha','Ramoji Film City','Benefit show',
+  'Hero entry','Cricket at Uppal','Pelli mandapam','Mangalsutram','Pattu pancha','Kalamkari saree','Kondapalli toys','Araku coffee',
+  'Vizag beach','Tirumala hills','Sankranti muggulu','Haleem bowl','Double ka meetha','Idli plate','Gongura','Paan','RTC bus',
+  'Bigg Boss house','Film poster','Movie ticket','Dhol','Veena','Bullet bike','Kabaddi']
+};
+const P = {cat:'mixed', time:60, rounds:3, teams:['Team Mirchi','Team Laddu'], score:[0,0], turn:0, done:[0,0], used:new Set(), cur:null,
+  timer:null, left:0, live:false, strokes:[], color:'#2a0d00', size:7, eraser:false, drawing:null, cw:0, ch:0};
+segBind('p-cats','cat', v => P.cat = v);
+segBind('p-time','t', v => P.time = +v);
+segBind('p-rounds','r', v => P.rounds = +v);
+function pShow(step){ ['p-hand','p-word','p-draw','p-result','p-final'].forEach(x => $(x).classList.toggle('hidden', x !== step)); }
+function pPick(){
+  const cats = P.cat === 'mixed' ? ['easy','telugu'] : [P.cat];
+  const pool = [];
+  cats.forEach(c => PIC_WORDS[c].forEach(w => { if (!P.used.has(w)) pool.push({c, w}); }));
+  if (!pool.length){ P.used.clear(); return pPick(); }
+  const pick = pool[rand(pool.length)]; P.used.add(pick.w); return pick;
+}
+function pScore(){
+  [0,1].forEach(i => { $('p-n'+i).textContent = P.teams[i]; $('p-p'+i).textContent = P.score[i]; $('p-s'+i).classList.toggle('active', P.turn === i); });
+  $('p-turninfo').textContent = P.turn < 0 ? 'Game over' : `${P.teams[P.turn]} · turn ${P.done[P.turn]+1}${P.rounds === 99 ? '' : ' of ' + P.rounds}`;
+}
+function pHand(){
+  if (P.rounds !== 99 && P.done[0] >= P.rounds && P.done[1] >= P.rounds) return pFinal();
+  pScore(); $('p-handteam').textContent = P.teams[P.turn]; pShow('p-hand');
+}
+function pLoadWord(){
+  P.cur = pPick();
+  $('p-wordtext').textContent = P.cur.w;
+  $('p-wcat').textContent = P.cur.c === 'easy' ? 'Easy' : 'Telugu special';
+}
+$('p-start').addEventListener('click', () => {
+  P.teams = [$('p-t1').value.trim() || 'Team 1', $('p-t2').value.trim() || 'Team 2'];
+  P.score = [0,0]; P.done = [0,0]; P.turn = rand(2);
+  $('p-setup').classList.add('hidden'); $('p-play').classList.remove('hidden');
+  window.scrollTo(0,0); pHand();
+});
+$('p-reveal').addEventListener('click', () => { pLoadWord(); pShow('p-word'); });
+$('p-swap').addEventListener('click', pLoadWord);
+$('p-go').addEventListener('click', () => {
+  P.strokes = []; P.drawing = null; P.live = true;
+  $('p-peek').textContent = 'Peek at word';
+  pShow('p-draw'); pSize();
+  P.left = P.time; pTick(); beep(660,.12);
+  clearInterval(P.timer);
+  P.timer = setInterval(() => { P.left--; pTick(); if (P.left <= 0) pEnd(false, true); else if (P.left <= 5) beep(880,.08); }, 1000);
+  $('p-draw').scrollIntoView({block:'start', behavior:'smooth'});
+});
+function pTick(){
+  $('p-timer').textContent = P.left;
+  $('p-timer').classList.toggle('low', P.left <= 10);
+  $('p-bar').style.width = (P.left / P.time * 100) + '%';
+}
+$('p-peek').addEventListener('click', () => {
+  const b = $('p-peek'), showing = b.dataset.showing === '1';
+  b.dataset.showing = showing ? '' : '1';
+  b.textContent = showing ? 'Peek at word' : P.cur.w;
+});
+function pEnd(got, timeout){
+  if (!P.live) return;
+  P.live = false; clearInterval(P.timer); P.timer = null; P.drawing = null;
+  if (got){ P.score[P.turn]++; beep(1046,.15); setTimeout(() => beep(1318,.2), 140); } else beep(220,.4);
+  P.done[P.turn]++;
+  $('p-resmsg').textContent = got ? `${P.teams[P.turn]} got it in ${P.time - P.left}s! +1` : (timeout ? "Time's up! The word was" : 'Gave up. The word was');
+  $('p-resword').textContent = P.cur.w;
+  P.turn = 1 - P.turn; pScore(); pShow('p-result');
+  window.scrollTo(0,0);
+}
+$('p-got').addEventListener('click', () => pEnd(true));
+$('p-skip').addEventListener('click', () => pEnd(false));
+$('p-next').addEventListener('click', pHand);
+function pFinal(){
+  P.live = false; clearInterval(P.timer);
+  const [a,b] = P.score;
+  $('p-winner').textContent = a === b ? `It's a tie! ${a} – ${b}` : `${a > b ? P.teams[0] : P.teams[1]} wins ${Math.max(a,b)} – ${Math.min(a,b)}!`;
+  P.turn = -1; [0,1].forEach(i => $('p-s'+i).classList.remove('active'));
+  pScore(); pShow('p-final');
+}
+$('p-quit').addEventListener('click', pFinal);
+$('p-again').addEventListener('click', () => { $('p-play').classList.add('hidden'); $('p-setup').classList.remove('hidden'); window.scrollTo(0,0); });
+
+/* drawing pad */
+const pc = $('p-canvas'), pctx = pc.getContext('2d');
+const PAPER = '#fffaf0';
+function pSize(){
+  const w = pc.parentElement.clientWidth; if (!w) return;
+  const h = Math.round(Math.min(w*1.05, Math.max(260, window.innerHeight*.56)));
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  pc.width = Math.round(w*dpr); pc.height = Math.round(h*dpr); pc.style.height = h + 'px';
+  pctx.setTransform(dpr, 0, 0, dpr, 0, 0); P.cw = w; P.ch = h; pRedraw();
+}
+function pWidth(s){ return s.w * P.cw / 360; }
+function pStroke(s){
+  const pts = s.p; if (!pts.length) return;
+  pctx.lineCap = 'round'; pctx.lineJoin = 'round'; pctx.strokeStyle = s.c; pctx.fillStyle = s.c; pctx.lineWidth = pWidth(s);
+  if (pts.length === 1){ pctx.beginPath(); pctx.arc(pts[0][0]*P.cw, pts[0][1]*P.ch, pWidth(s)/2, 0, Math.PI*2); pctx.fill(); return; }
+  pctx.beginPath(); pctx.moveTo(pts[0][0]*P.cw, pts[0][1]*P.ch);
+  for (let i=1;i<pts.length-1;i++){
+    const mx = (pts[i][0] + pts[i+1][0])/2*P.cw, my = (pts[i][1] + pts[i+1][1])/2*P.ch;
+    pctx.quadraticCurveTo(pts[i][0]*P.cw, pts[i][1]*P.ch, mx, my);
+  }
+  const l = pts[pts.length-1]; pctx.lineTo(l[0]*P.cw, l[1]*P.ch); pctx.stroke();
+}
+function pRedraw(){ pctx.fillStyle = PAPER; pctx.fillRect(0, 0, P.cw, P.ch); P.strokes.forEach(pStroke); }
+function pPoint(e){ const r = pc.getBoundingClientRect(); return [Math.min(1, Math.max(0, (e.clientX - r.left)/r.width)), Math.min(1, Math.max(0, (e.clientY - r.top)/r.height))]; }
+pc.addEventListener('pointerdown', e => {
+  if (!P.live) return; e.preventDefault();
+  try{ pc.setPointerCapture(e.pointerId); }catch(err){}
+  P.drawing = {c: P.eraser ? PAPER : P.color, w: P.eraser ? P.size*2.5 : P.size, p: [pPoint(e)]};
+  P.strokes.push(P.drawing); pStroke(P.drawing);
+});
+pc.addEventListener('pointermove', e => {
+  if (!P.drawing) return; e.preventDefault();
+  const evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
+  for (const ev of (evs.length ? evs : [e])){
+    const prev = P.drawing.p[P.drawing.p.length-1], pt = pPoint(ev);
+    P.drawing.p.push(pt);
+    pctx.lineCap = 'round'; pctx.strokeStyle = P.drawing.c; pctx.lineWidth = pWidth(P.drawing);
+    pctx.beginPath(); pctx.moveTo(prev[0]*P.cw, prev[1]*P.ch); pctx.lineTo(pt[0]*P.cw, pt[1]*P.ch); pctx.stroke();
+  }
+});
+['pointerup','pointercancel','pointerleave'].forEach(t => pc.addEventListener(t, () => { if (P.drawing){ P.drawing = null; pRedraw(); } }));
+$('v-pictionary').addEventListener('click', e => {
+  const b = e.target.closest('.ptools button'); if (!b) return;
+  if (b.dataset.color){ P.color = b.dataset.color; P.eraser = false;
+    document.querySelectorAll('.swatch').forEach(x => x.classList.toggle('on', x === b));
+    document.querySelector('[data-act="eraser"]').classList.remove('on'); return; }
+  if (b.dataset.size){ P.size = +b.dataset.size; document.querySelectorAll('.ptools .tool[data-size]').forEach(x => x.classList.toggle('on', x === b)); return; }
+  const act = b.dataset.act;
+  if (act === 'eraser'){ P.eraser = !P.eraser; b.classList.toggle('on', P.eraser); document.querySelectorAll('.swatch').forEach(x => x.classList.toggle('on', !P.eraser && x.dataset.color === P.color)); return; }
+  if (act === 'undo'){ P.strokes.pop(); pRedraw(); return; }
+  if (act === 'clear') return twoTap(b, 'Sure?', () => { P.strokes = []; pRedraw(); });
+});
+let pRT = 0;
+window.addEventListener('resize', () => { clearTimeout(pRT); pRT = setTimeout(() => { if (!$('p-draw').classList.contains('hidden')) pSize(); }, 150); });
 
 /* =================================================
    BACKGROUND: floating lanterns over a slowly turning rangoli
