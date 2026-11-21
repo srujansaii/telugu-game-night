@@ -482,6 +482,7 @@ button{position:relative;overflow:hidden;isolation:isolate;-webkit-tap-highlight
         <li>Split into two teams. Each turn, one person from the team draws.</li>
         <li>Only the drawer looks at the word. Then they tap <b>Start drawing</b> and draw on this phone.</li>
         <li>No letters, numbers or talking. The team shouts guesses before the timer runs out.</li>
+        <li>For a movie, draw a scene, a famous prop or what the title means. Drawing a film reel first tells your team it's a movie.</li>
         <li>Guessed it? Tap <b>They got it</b> for a point. Then pass the phone to the other team.</li>
       </ol>
     </div>
@@ -494,10 +495,11 @@ button{position:relative;overflow:hidden;isolation:isolate;-webkit-tap-highlight
     </div>
     <div class="panel stack">
       <h3>Words</h3>
-      <div class="seg" id="p-cats">
-        <button type="button" data-cat="easy" aria-pressed="false">Easy things</button>
-        <button type="button" data-cat="telugu" aria-pressed="false">Telugu special</button>
-        <button type="button" data-cat="mixed" aria-pressed="true">Mixed</button>
+      <div class="cats" id="p-cats">
+        <button type="button" data-cat="easy" aria-pressed="false">✏️ Easy things<small>Kite, auto, mango</small></button>
+        <button type="button" data-cat="telugu" aria-pressed="false">🪔 Telugu special<small>Charminar, Bathukamma</small></button>
+        <button type="button" data-cat="movies" aria-pressed="false">🎬 Telugu movies<small>Eega, Pushpa, Mahanati</small></button>
+        <button type="button" data-cat="mixed" aria-pressed="true">🎲 Mixed<small>All three, shuffled</small></button>
       </div>
       <h3>Time to draw</h3>
       <div class="seg" id="p-time">
@@ -1588,7 +1590,14 @@ telugu:['Charminar','Tirupati laddu','Bathukamma','Bonalu','Sankranti kite','Gan
   'Baahubali','RRR','Naatu Naatu','Eega','Magadheera','Golconda Fort','Hussain Sagar Buddha','Ramoji Film City','Benefit show',
   'Hero entry','Cricket at Uppal','Pelli mandapam','Mangalsutram','Pattu pancha','Kalamkari saree','Kondapalli toys','Araku coffee',
   'Vizag beach','Tirumala hills','Sankranti muggulu','Haleem bowl','Double ka meetha','Idli plate','Gongura','Paan','RTC bus',
-  'Bigg Boss house','Film poster','Movie ticket','Dhol','Veena','Bullet bike','Kabaddi']
+  'Bigg Boss house','Film poster','Movie ticket','Dhol','Veena','Bullet bike','Kabaddi'],
+movies:['Baahubali','RRR','Pushpa','Pushpa 2','Eega','Magadheera','Arjun Reddy','Pokiri','Athadu','Okkadu','Simhadri','Temper',
+  'Rangasthalam','Mahanati','Jersey','Fidaa','Bommarillu','Happy Days','Kick','Dookudu','Businessman','Srimanthudu','Maharshi',
+  'Kalki 2898 AD','Salaar','Devara','HanuMan','Sita Ramam','Major','Hi Nanna','Dasara','Akhanda','Uppena','Jathi Ratnalu','Manam',
+  'Varsham','Yamadonga','Race Gurram','Julayi','Mirchi','Chatrapathi','Gabbar Singh','Attarintiki Daredi','Indra','Tholi Prema',
+  'Kushi','Aditya 369','Gang Leader','Godavari','Leader','Geethanjali','Mayabazar','Sye','Vikramarkudu','Maryada Ramanna','Darling',
+  'Oopiri','Krack','Saaho','Baby','Karthikeya 2','Thandel','Lucky Baskhar','Game Changer','DJ Tillu','Balagam','Goodachari','Awe',
+  'Ala Vaikunthapurramuloo','Bheemla Nayak','Sarkaru Vaari Paata','Guntur Kaaram','Khaleja','Jalsa','Arya','Ye Maaya Chesave']
 };
 const P = {cat:'mixed', time:60, rounds:3, teams:['Team Mirchi','Team Laddu'], score:[0,0], turn:0, done:[0,0], used:new Set(), cur:null,
   timer:null, left:0, live:false, strokes:[], color:'#2a0d00', size:7, eraser:false, drawing:null, cw:0, ch:0};
@@ -1597,7 +1606,7 @@ segBind('p-time','t', v => P.time = +v);
 segBind('p-rounds','r', v => P.rounds = +v);
 function pShow(step){ ['p-hand','p-word','p-draw','p-result','p-final'].forEach(x => $(x).classList.toggle('hidden', x !== step)); }
 function pPick(){
-  const cats = P.cat === 'mixed' ? ['easy','telugu'] : [P.cat];
+  const cats = P.cat === 'mixed' ? ['easy','telugu','movies'] : [P.cat];
   const pool = [];
   cats.forEach(c => PIC_WORDS[c].forEach(w => { if (!P.used.has(w)) pool.push({c, w}); }));
   if (!pool.length){ P.used.clear(); return pPick(); }
@@ -1614,7 +1623,7 @@ function pHand(){
 function pLoadWord(){
   P.cur = pPick();
   $('p-wordtext').textContent = P.cur.w;
-  $('p-wcat').textContent = P.cur.c === 'easy' ? 'Easy' : 'Telugu special';
+  $('p-wcat').textContent = {easy:'Easy', telugu:'Telugu special', movies:'Telugu movie'}[P.cur.c];
 }
 $('p-start').addEventListener('click', () => {
   P.teams = [$('p-t1').value.trim() || 'Team 1', $('p-t2').value.trim() || 'Team 2'];
